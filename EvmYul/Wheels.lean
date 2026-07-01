@@ -11,7 +11,7 @@ def chainId : ℕ := 1
 
 def UInt256.toByteArray (val : UInt256) : ByteArray :=
   let b := BE val.toNat
-  ffi.ByteArray.zeroes ⟨32 - b.size⟩ ++ b
+  ffi.ByteArray.zeroes (32 - b.size) ++ b
 
 abbrev Literal := UInt256
 
@@ -36,7 +36,7 @@ instance {n : Nat} : OfNat AccountAddress n := ⟨Fin.ofNat _ n⟩
 
 def toByteArray (a : AccountAddress) : ByteArray :=
   let b := BE a
-  ffi.ByteArray.zeroes ⟨20 - b.size⟩ ++ b
+  ffi.ByteArray.zeroes (20 - b.size) ++ b
 
 end AccountAddress
 
@@ -193,7 +193,7 @@ def ByteArray.readBytes (source : ByteArray) (start size : ℕ) : ByteArray :=
       source.copySlice start empty 0 size
     else
       ⟨⟨source.toList.drop start |>.take size⟩⟩
-  read ++ ffi.ByteArray.zeroes ⟨size - read.size⟩
+  read ++ ffi.ByteArray.zeroes (size - read.size)
 
 def ByteArray.readWithoutPadding (source : ByteArray) (addr len : ℕ) : ByteArray :=
   if addr ≥ source.size then .empty else
@@ -207,7 +207,7 @@ def ByteArray.readWithPadding (source : ByteArray) (addr len : ℕ) : ByteArray 
     panic! s!"ByteArray.readWithPadding: can not handle byte arrays of length {len}"
   else
     let read := source.readWithoutPadding addr len
-    read ++ ffi.ByteArray.zeroes ⟨len - read.size⟩
+    read ++ ffi.ByteArray.zeroes (len - read.size)
 
 inductive 𝕋 where
   | 𝔹 : ByteArray → 𝕋
@@ -355,14 +355,14 @@ def ByteArray.write
     if sourceAddr ≥ source.size then
       let len := min len (dest.size - destAddr)
       let destAddr := min destAddr dest.size
-      (ffi.ByteArray.zeroes ⟨len⟩).copySlice 0 dest destAddr len
+      (ffi.ByteArray.zeroes len).copySlice 0 dest destAddr len
     else
       let practicalLen := min len (source.size - sourceAddr)
       let endPaddingAddr := min dest.size (destAddr + len)
       let sourcePaddingLength : ℕ := endPaddingAddr - (destAddr + practicalLen)
-      let sourcePadding := ffi.ByteArray.zeroes ⟨sourcePaddingLength⟩
+      let sourcePadding := ffi.ByteArray.zeroes sourcePaddingLength
       let destPaddingLength : ℕ := destAddr - dest.size
-      let destPadding := ffi.ByteArray.zeroes ⟨destPaddingLength⟩
+      let destPadding := ffi.ByteArray.zeroes destPaddingLength
       (source ++ sourcePadding).copySlice sourceAddr
         (dest ++ destPadding)
         destAddr

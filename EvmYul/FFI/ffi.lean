@@ -15,7 +15,17 @@ def BLAKE2 (d : ByteArray) : Except String ByteArray := do
   return BLAKE2Compress d
 
 @[extern "memset_zero"]
-opaque ByteArray.zeroes (n : USize) : ByteArray
+def memsetZero (n : USize) : ByteArray := ⟨⟨List.replicate n.toNat 0⟩⟩
+
+def ByteArray.zeroesImpl (n : Nat) : ByteArray := memsetZero n.toUSize
+
+/--
+`n` zero bytes. The reference body is kernel-reducible (so proofs about
+byte-array reads/pads can proceed by `rfl`/`decide`); at runtime it is
+implemented by the C `memset_zero` via `zeroesImpl`.
+-/
+@[implemented_by ByteArray.zeroesImpl]
+def ByteArray.zeroes (n : Nat) : ByteArray := ⟨⟨List.replicate n 0⟩⟩
 
 @[extern "keccak256"]
 opaque keccak256 (input : @& ByteArray) (len : USize) : ByteArray
