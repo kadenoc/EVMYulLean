@@ -1580,4 +1580,84 @@ theorem step_PUSH1_shape_strong
   subst hStep
   refine ⟨rfl, rfl, rfl, rfl⟩
 
+/-- PUSH0 strong: like `step_PUSH0_shape`, additionally proves `accountMap`
+preservation. -/
+theorem step_PUSH0_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hStep : EVM.step (f' + 1) cost (some (.Push .PUSH0, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = ⟨0⟩ :: s.stack ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  injection hStep with hStep
+  subst hStep
+  refine ⟨rfl, rfl, rfl, rfl⟩
+
+/-- JUMP strong: like `step_JUMP_shape`, additionally proves `accountMap`
+preservation. -/
+theorem step_JUMP_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.JUMP, arg)) s = .ok s') :
+    s'.pc = hd ∧
+    s'.stack = tl ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  rw [hStk] at hStep
+  simp only [Stack.pop, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, rfl, rfl, rfl⟩
+
+/-- SWAP2 strong: like `step_SWAP2_shape`, additionally proves `accountMap`
+preservation. -/
+theorem step_SWAP2_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.SWAP2, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = hd3 :: hd2 :: hd1 :: tl ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold swap at hStep
+  rw [hStk] at hStep
+  simp only [show List.take (2 + 1) (hd1 :: hd2 :: hd3 :: tl) = [hd1, hd2, hd3] from rfl,
+             show List.drop (2 + 1) (hd1 :: hd2 :: hd3 :: tl) = tl from rfl,
+             show ([hd1, hd2, hd3] : List UInt256).length = 2 + 1 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, rfl, rfl, rfl⟩
+
+/-- MSTORE strong: like `step_MSTORE_shape`, additionally proves `accountMap`
+preservation (a memory write never touches the account map). -/
+theorem step_MSTORE_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd1 :: hd2 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.MSTORE, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = tl ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dispatchBinaryMachineStateOp EVM.binaryMachineStateOp at hStep
+  rw [hStk] at hStep
+  simp only [Stack.pop2, Id_run_ok, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, rfl, rfl, rfl⟩
+
 end EvmYul.Frame
