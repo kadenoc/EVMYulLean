@@ -112,5 +112,60 @@ theorem EVM_step_fallthrough_ge
   rw [hAM] at hge
   exact hge
 
+/-! ## `EvmYul.step` STORAGE frame at `C ≠ codeOwner` (foreign-frame leaves)
+
+The storage-side companions of `EvmYul_step_ge_of_ne_codeOwner`: at any address
+other than the executing code owner, a successful `EvmYul.step` of ANY handled
+opcode — SELFDESTRUCT included — leaves the storage projection of `find? C`,
+and hence `storageSum · C` (and any per-slot read), unchanged. SELFDESTRUCT may
+still move BALANCE into `C`, which is why the conclusion is the storage
+projection rather than wholesale `find?` equality. These are the per-step
+foreign-frame leaves a per-account storage invariant's call-tree closure
+consumes (each foreign frame's non-recursing steps cannot touch `C`'s storage;
+the recursing CALL/CREATE arms are the closure's induction). -/
+
+theorem EvmYul_step_storageSum_eq_of_ne_codeOwner
+    (op : Operation .EVM) (arg : Option (UInt256 × Nat))
+    (s s' : EVM.State) (C : AccountAddress)
+    (h_ne : C ≠ s.executionEnv.codeOwner)
+    (h_handled : EvmYul.Frame.handledByEvmYulStep op)
+    (h : EvmYul.step op arg s = .ok s') :
+    storageSum s'.accountMap C = storageSum s.accountMap C := by
+  by_cases hSD : op = .SELFDESTRUCT
+  · subst hSD
+    have h' : EvmYul.step (.SELFDESTRUCT : Operation .EVM) .none s = .ok s' := by
+      have harg : EvmYul.step (.SELFDESTRUCT : Operation .EVM) arg s
+          = EvmYul.step (.SELFDESTRUCT : Operation .EVM) .none s := by
+        unfold EvmYul.step
+        rfl
+      rw [← harg]
+      exact h
+    exact selfdestruct_storageSum_at_ne_Iₐ_eq s s' C h' h_ne
+  · exact storageSum_of_storage_proj_eq
+      (EvmYul.step_modifies_storage_only_at_codeOwner op arg s s' C h_handled hSD h h_ne)
+
+/-- `EVM.step`'s fallthrough arm (gas already deducted) preserves `storageSum`
+at `C ≠ codeOwner` — the storage twin of `EVM_step_fallthrough_ge`. -/
+theorem EVM_step_fallthrough_storageSum_eq
+    (_f : ℕ) (gasCost : ℕ)
+    (instr : Operation .EVM × Option (UInt256 × Nat))
+    (s s' : EVM.State) (C : AccountAddress)
+    (h_ne : C ≠ s.executionEnv.codeOwner)
+    (h_handled : EvmYul.Frame.handledByEvmYulStep instr.1)
+    (h : EvmYul.step instr.1 instr.2
+          {s with gasAvailable := s.gasAvailable - UInt256.ofNat gasCost}
+          = .ok s') :
+    storageSum s'.accountMap C = storageSum s.accountMap C := by
+  set s_pre : EVM.State :=
+    {s with gasAvailable := s.gasAvailable - UInt256.ofNat gasCost}
+    with hs_pre_def
+  have hAM : s_pre.accountMap = s.accountMap := rfl
+  have hCO : s_pre.executionEnv.codeOwner = s.executionEnv.codeOwner := rfl
+  have h_ne' : C ≠ s_pre.executionEnv.codeOwner := by rw [hCO]; exact h_ne
+  have heq := EvmYul_step_storageSum_eq_of_ne_codeOwner instr.1 instr.2 s_pre s' C
+    h_ne' h_handled h
+  rw [hAM] at heq
+  exact heq
+
 end Frame
 end EvmYul

@@ -96,9 +96,21 @@ The X-instruction-loop frame:
   layer to the X-loop layer.
 * `X_balance_ge_zero` — trivial 0-fuel base case.
 
-### `EvmYul/Frame/StepSystemFrame.lean` (116 LoC)
+### `EvmYul/Frame/StepSystemFrame.lean`
 Aggregator for the system-arm dispatchers (CREATE/CREATE2/CALL/CALLCODE/
-DELEGATECALL/STATICCALL).
+DELEGATECALL/STATICCALL), plus the foreign-frame step summaries at
+`C ≠ codeOwner`:
+
+* `EvmYul_step_ge_of_ne_codeOwner` / `EVM_step_fallthrough_ge` — balance
+  monotonicity across any handled `EvmYul.step` (SELFDESTRUCT included) and
+  `EVM.step`'s gas-deducted fallthrough arm.
+* `EvmYul_step_storageSum_eq_of_ne_codeOwner` /
+  `EVM_step_fallthrough_storageSum_eq` — the STORAGE twins: any handled step
+  (SELFDESTRUCT included, which may still move *balance* into `C`) leaves the
+  storage projection of `find? C` — hence `storageSum · C` and every slot
+  read — unchanged. The per-step leaves for a storage-invariant call-tree
+  closure (composed from `step_modifies_storage_only_at_codeOwner` and
+  `selfdestruct_storageSum_at_ne_Iₐ_eq`).
 
 ### `EvmYul/Frame/UpsilonFrame.lean`
 The transaction-level frame `Υ`:
