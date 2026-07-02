@@ -1640,6 +1640,24 @@ theorem step_SWAP2_shape_strong
   subst hStep
   refine ⟨rfl, rfl, rfl, rfl⟩
 
+/-- STOP strong: like `step_STOP_shape`, additionally proves `accountMap`
+preservation — the halting step leaves the account state exactly as it was,
+so a storage effect proven at the state *before* the final `STOP` transports
+to the run's final state. -/
+theorem step_STOP_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hStep : EVM.step (f' + 1) cost (some (.STOP, arg)) s = .ok s') :
+    s'.pc = s.pc ∧
+    s'.stack = s.stack ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run, Except.ok.injEq] at hStep
+  subst hStep
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
 /-- MSTORE strong: like `step_MSTORE_shape`, additionally proves `accountMap`
 preservation (a memory write never touches the account map). -/
 theorem step_MSTORE_shape_strong
