@@ -236,6 +236,21 @@ theorem step_POP_shape_mem
   subst hStep
   exact ⟨rfl, rfl⟩
 
+theorem step_JUMP_shape_mem
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.JUMP, arg)) s = .ok s') :
+    s'.toMachineState.memory = s.toMachineState.memory ∧
+    s'.toMachineState.activeWords = s.toMachineState.activeWords := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  rw [hStk] at hStep
+  simp only [Stack.pop, Except.ok.injEq] at hStep
+  subst hStep
+  exact ⟨rfl, rfl⟩
+
 theorem step_JUMPI_shape_mem
     (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
     (hd1 hd2 : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd1 :: hd2 :: tl)
