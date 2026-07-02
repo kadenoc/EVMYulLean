@@ -1678,4 +1678,105 @@ theorem step_MSTORE_shape_strong
   subst hStep
   refine ⟨rfl, rfl, rfl, rfl⟩
 
+/-- DUP4 strong: like `step_DUP4_shape`, additionally proves `accountMap`
+preservation. -/
+theorem step_DUP4_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 hd4 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: hd4 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.DUP4, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = hd4 :: s.stack ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dup at hStep
+  rw [hStk] at hStep
+  simp only [show List.take 4 (hd1 :: hd2 :: hd3 :: hd4 :: tl) = [hd1, hd2, hd3, hd4] from rfl,
+             show ([hd1, hd2, hd3, hd4] : List UInt256).length = 4 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, ?_, rfl, rfl⟩
+  show [hd1, hd2, hd3, hd4].getLast! :: (hd1 :: hd2 :: hd3 :: hd4 :: tl) = hd4 :: s.stack
+  rw [hStk]; rfl
+
+/-- DUP6: duplicates the sixth-from-top, `pc += 1`. -/
+theorem step_DUP6_shape
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 hd4 hd5 hd6 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.DUP6, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = hd6 :: s.stack ∧
+    s'.executionEnv = s.executionEnv := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dup at hStep
+  rw [hStk] at hStep
+  simp only [show List.take 6 (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl)
+                = [hd1, hd2, hd3, hd4, hd5, hd6] from rfl,
+             show ([hd1, hd2, hd3, hd4, hd5, hd6] : List UInt256).length = 6 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, ?_, rfl⟩
+  show [hd1, hd2, hd3, hd4, hd5, hd6].getLast!
+        :: (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl) = hd6 :: s.stack
+  rw [hStk]; rfl
+
+/-- DUP6 strong: like `step_DUP6_shape`, additionally proves `accountMap`
+preservation. -/
+theorem step_DUP6_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 hd4 hd5 hd6 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.DUP6, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = hd6 :: s.stack ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dup at hStep
+  rw [hStk] at hStep
+  simp only [show List.take 6 (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl)
+                = [hd1, hd2, hd3, hd4, hd5, hd6] from rfl,
+             show ([hd1, hd2, hd3, hd4, hd5, hd6] : List UInt256).length = 6 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, ?_, rfl, rfl⟩
+  show [hd1, hd2, hd3, hd4, hd5, hd6].getLast!
+        :: (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl) = hd6 :: s.stack
+  rw [hStk]; rfl
+
+/-- SWAP3 strong: like `step_SWAP3_shape`, additionally proves `accountMap`
+preservation. -/
+theorem step_SWAP3_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 hd4 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: hd4 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.SWAP3, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = hd4 :: hd2 :: hd3 :: hd1 :: tl ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold swap at hStep
+  rw [hStk] at hStep
+  simp only [show List.take (3 + 1) (hd1 :: hd2 :: hd3 :: hd4 :: tl) = [hd1, hd2, hd3, hd4] from rfl,
+             show List.drop (3 + 1) (hd1 :: hd2 :: hd3 :: hd4 :: tl) = tl from rfl,
+             show ([hd1, hd2, hd3, hd4] : List UInt256).length = 3 + 1 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, rfl, rfl, rfl⟩
+
 end EvmYul.Frame
