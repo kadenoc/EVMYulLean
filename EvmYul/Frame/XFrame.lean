@@ -41,6 +41,41 @@ theorem EVM_X_zero
     (validJumps : Array UInt256) (evmState : EVM.State) :
     EVM.X 0 validJumps evmState = .error .OutOfFuel := rfl
 
+/-! ## `step` fuel-irrelevance for non-system ops (call-free monotonicity brick)
+
+`X (f+1)` invokes `step f gasCost instr s`, and `step` threads its fuel `f`
+into the nested `Ξ`/`Λ` only through the six *system* arms (CREATE, CREATE2,
+CALL, CALLCODE, DELEGATECALL, STATICCALL); every other opcode (STOP / RETURN /
+REVERT / SELFDESTRUCT / arithmetic / stack / storage / …) hits the fall-through
+`EvmYul.step instr arg {…}`, which never reads the fuel. So for any op *outside*
+those six, `step`'s result is independent of the fuel value.
+
+This is the leaf enabler of a **call-free `X`-success fuel-monotonicity** lemma
+(`X n s = success sf → X (n+1) s = success sf`): a run whose every executed op is
+non-system never depends on fuel except as the recursion bound, so surplus fuel
+after halting is inert. `X` is NOT fuel-monotone in general (surplus fuel feeds
+nested calls and can flip an outer branch), which is exactly why the hypothesis
+is "no CALL/CREATE executed". -/
+
+set_option maxHeartbeats 4000000 in
+/-- `EVM.step`'s result is independent of the fuel value for any op that is not
+one of the six system (CALL/CREATE-family) ops: both `f+1` and `f'+1` route the
+op to the fuel-free `EvmYul.step` fall-through arm. -/
+theorem step_fuel_irrel
+    (op : Operation .EVM) (arg : Option (UInt256 × Nat)) (gasCost : ℕ)
+    (f f' : ℕ) (s : EVM.State)
+    (h1 : op ≠ .CREATE) (h2 : op ≠ .CREATE2) (h3 : op ≠ .CALL)
+    (h4 : op ≠ .CALLCODE) (h5 : op ≠ .DELEGATECALL) (h6 : op ≠ .STATICCALL) :
+    EVM.step (f + 1) gasCost (some (op, arg)) s
+      = EVM.step (f' + 1) gasCost (some (op, arg)) s := by
+  cases op
+  case System sysOp =>
+    cases sysOp <;> first
+      | rfl
+      | exact absurd rfl h1 | exact absurd rfl h2 | exact absurd rfl h3
+      | exact absurd rfl h4 | exact absurd rfl h5 | exact absurd rfl h6
+  all_goals rfl
+
 /-- `X_balance_ge` at fuel 0: trivial because `X 0 _ _ = .error`. The
 match on the result reduces to `True` in the `.error` branch, which
 is discharged by `trivial`. -/
