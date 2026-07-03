@@ -519,6 +519,27 @@ theorem step_MLOAD_shape
   subst hStep
   refine ⟨rfl, ⟨_, rfl⟩, rfl⟩
 
+/-- MLOAD strong: like `step_MLOAD_shape`, but also exposes `accountMap` preservation.
+`MLOAD` reads only the machine-state memory, leaving the underlying `EvmYul.State`
+(hence `accountMap`) untouched — the fact a storage-then-log walk needs to thread the
+executing account's storage read past the memory loads. -/
+theorem step_MLOAD_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.MLOAD, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    (∃ v, s'.stack = v :: tl) ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  rw [hStk] at hStep
+  simp only [Stack.pop, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, ⟨_, rfl⟩, rfl, rfl⟩
+
 /-! ## Storage / control-flow opcodes -/
 
 /-- SSTORE: pops 2, no push, `pc += 1`. The two popped values are
@@ -541,6 +562,37 @@ theorem step_SSTORE_shape
   refine ⟨rfl, rfl, ?_⟩
   show (EvmYul.State.sstore _ _ _).executionEnv = s.executionEnv
   rw [sstore_preserves_executionEnv]
+
+/-- LOG1: pops 3 (memory offset `μ₀`, size `μ₁`, and one topic `μ₂`), pushes nothing,
+`pc += 1`. Beyond the stack/pc/executionEnv/accountMap frame, it exposes the *substate
+effect*: exactly one `LogEntry` is appended to `logSeries`, recording the executing
+contract (`codeOwner`) as emitter, `#[μ₂]` as the single topic, and the memory slice
+`memory.readWithPadding μ₀ μ₁` as the data. `LOG1` touches only the substate log series
+and `activeWords` (both live in the machine/substate layer), leaving `accountMap`,
+`executionEnv`, and storage untouched. This is the first step-shape over the LOG opcode
+family (event emission). -/
+theorem step_LOG1_shape
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (μ₀ μ₁ μ₂ : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = μ₀ :: μ₁ :: μ₂ :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.LOG1, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = tl ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap ∧
+    s'.substate.logSeries
+      = s.substate.logSeries.push
+          ⟨s.executionEnv.codeOwner, #[μ₂],
+           s.toMachineState.memory.readWithPadding μ₀.toNat μ₁.toNat⟩ := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dispatchLog1 EVM.log1Op at hStep
+  rw [hStk] at hStep
+  simp only [Stack.pop3, Id_run_ok, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 /-- STOP: pc, stack, and executionEnv all unchanged. -/
 theorem step_STOP_shape
