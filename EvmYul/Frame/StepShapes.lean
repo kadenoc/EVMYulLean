@@ -1854,4 +1854,54 @@ theorem step_SWAP4_shape_strong
   subst hStep
   refine ⟨rfl, rfl, rfl, rfl⟩
 
+/-- DUP7 strong: like `step_DUP6_shape_strong` for the seventh stack word. -/
+theorem step_DUP7_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 hd4 hd5 hd6 hd7 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: hd7 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.DUP7, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = hd7 :: s.stack ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dup at hStep
+  rw [hStk] at hStep
+  simp only [show List.take 7 (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: hd7 :: tl)
+                = [hd1, hd2, hd3, hd4, hd5, hd6, hd7] from rfl,
+             show ([hd1, hd2, hd3, hd4, hd5, hd6, hd7] : List UInt256).length = 7 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, ?_, rfl, rfl⟩
+  show [hd1, hd2, hd3, hd4, hd5, hd6, hd7].getLast!
+        :: (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: hd7 :: tl) = hd7 :: s.stack
+  rw [hStk]; rfl
+
+/-- SWAP5 strong: like `step_SWAP4_shape_strong`, swapping the top with the sixth word. -/
+theorem step_SWAP5_shape_strong
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 hd4 hd5 hd6 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.SWAP5, arg)) s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat 1 ∧
+    s'.stack = hd6 :: hd2 :: hd3 :: hd4 :: hd5 :: hd1 :: tl ∧
+    s'.executionEnv = s.executionEnv ∧
+    s'.accountMap = s.accountMap := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold swap at hStep
+  rw [hStk] at hStep
+  simp only [show List.take (5 + 1) (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl)
+               = [hd1, hd2, hd3, hd4, hd5, hd6] from rfl,
+             show List.drop (5 + 1) (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: hd6 :: tl) = tl from rfl,
+             show ([hd1, hd2, hd3, hd4, hd5, hd6] : List UInt256).length = 5 + 1 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  refine ⟨rfl, rfl, rfl, rfl⟩
+
 end EvmYul.Frame
