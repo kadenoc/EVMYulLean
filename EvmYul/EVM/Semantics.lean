@@ -96,13 +96,20 @@ def fetchInstr (I : EvmYul.ExecutionEnv .EVM) (pc : UInt256) :
                Except EVM.ExecutionException (Operation .EVM × Option (UInt256 × Nat)) :=
   decode I.code pc |>.option (.error .StackUnderflow) Except.ok
 
-partial def D_J_aux (c : ByteArray) (i : UInt256) (result : Array UInt256) : Array UInt256 :=
-  match c.get? i.toNat >>= EvmYul.EVM.parseInstr with
-    | none => result
-    | some cᵢ => D_J_aux c (N i cᵢ) (if cᵢ = .JUMPDEST then result.push i else result)
+-- Structural (fuel-bounded) so `D_J` kernel-reduces (`decide`-able jumpdest sets).
+-- The scan advances the pc by ≥ 1 each step and stops when `get?` runs off the end, so
+-- `fuel := c.size + 1` (each instruction is ≥ 1 byte) always reaches the same fixpoint the
+-- former `partial def` computed; the value is unchanged.
+def D_J_aux (c : ByteArray) (i : UInt256) (fuel : ℕ) (result : Array UInt256) : Array UInt256 :=
+  match fuel with
+  | 0 => result
+  | fuel + 1 =>
+    match c.get? i.toNat >>= EvmYul.EVM.parseInstr with
+      | none => result
+      | some cᵢ => D_J_aux c (N i cᵢ) fuel (if cᵢ = .JUMPDEST then result.push i else result)
 
 def D_J (c : ByteArray) (i : UInt256) : Array UInt256 :=
-  D_J_aux c i #[]
+  D_J_aux c i (c.size + 1) #[]
 
 private def BitVec.ofFn {k} (x : Fin k → Bool) : BitVec k :=
   BitVec.ofNat k (natOfBools (Vector.ofFn x))
