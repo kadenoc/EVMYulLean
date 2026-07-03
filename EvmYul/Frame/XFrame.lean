@@ -229,5 +229,313 @@ theorem X_balance_ge_prop_zero
   rw [EVM_X_zero]
   trivial
 
+/-! ## Uniform `EvmYul.step` pc-transition (`s'.pc = N s.pc op`)
+
+For any *handled*, non-jump, non-halting opcode, `EvmYul.step` advances the pc by exactly
+`argOnNBytesOfInstr op + 1` (= `EvmYul.EVM.N s.pc op`): every such opcode's transformer ends in
+`replaceStackAndIncrPC … pcΔ` with `pcΔ = argWidth + 1` (`= 1` for the non-PUSH ops, whose
+`argWidth = 0`). `pc` lives in the `EVM.State` wrapper above `toState`, so the inner state/memory
+ops never touch it — hence the family lemmas need no side hypotheses (unlike their `accountMap`
+analogues). `JUMP`/`JUMPI` (data-dependent pc) and the halting ops (`STOP`/`RETURN`/`REVERT`/
+`SELFDESTRUCT`, and `INVALID` which errors) are excluded by hypothesis; the assembly mirrors
+`EvmYul.step_accountMap_eq_of_strict`. `hargw` ties the PUSH immediate's byte-width to the op (it
+holds for the `arg` a real `decode` produces). The consumer-side pc-region invariant lemma any
+bytecode contract's fuel/CFG reasoning needs. -/
+theorem execBinOp_pc {f : Primop.Binary} {s s' : EVM.State} (h : EVM.execBinOp f s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.execBinOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem execTriOp_pc {f : Primop.Ternary} {s s' : EVM.State} (h : EVM.execTriOp f s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.execTriOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem execUnOp_pc {f : Primop.Unary} {s s' : EVM.State} (h : EVM.execUnOp f s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.execUnOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem execQuadOp_pc {f : Primop.Quaternary} {s s' : EVM.State} (h : EVM.execQuadOp f s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.execQuadOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem unaryExecutionEnvOp_pc {op : ExecutionEnv .EVM → UInt256 → UInt256} {s s' : EVM.State} (h : EVM.unaryExecutionEnvOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.unaryExecutionEnvOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem binaryMachineStateOp_pc {op : MachineState → UInt256 → UInt256 → MachineState} {s s' : EVM.State} (h : EVM.binaryMachineStateOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.binaryMachineStateOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem binaryMachineStateOp'_pc {op : MachineState → UInt256 → UInt256 → UInt256 × MachineState} {s s' : EVM.State} (h : EVM.binaryMachineStateOp' op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.binaryMachineStateOp' at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem ternaryMachineStateOp_pc {op : MachineState → UInt256 → UInt256 → UInt256 → MachineState} {s s' : EVM.State} (h : EVM.ternaryMachineStateOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.ternaryMachineStateOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem unaryStateOp_pc {op : EvmYul.State .EVM → UInt256 → EvmYul.State .EVM × UInt256} {s s' : EVM.State} (h : EVM.unaryStateOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.unaryStateOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem binaryStateOp_pc {op : EvmYul.State .EVM → UInt256 → UInt256 → EvmYul.State .EVM} {s s' : EVM.State} (h : EVM.binaryStateOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.binaryStateOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem ternaryCopyOp_pc {op : SharedState .EVM → UInt256 → UInt256 → UInt256 → SharedState .EVM} {s s' : EVM.State} (h : EVM.ternaryCopyOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.ternaryCopyOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem quaternaryCopyOp_pc {op : SharedState .EVM → UInt256 → UInt256 → UInt256 → UInt256 → SharedState .EVM} {s s' : EVM.State} (h : EVM.quaternaryCopyOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.quaternaryCopyOp at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem log0Op_pc {s s' : EVM.State} (h : EVM.log0Op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.log0Op at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem log1Op_pc {s s' : EVM.State} (h : EVM.log1Op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.log1Op at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem log2Op_pc {s s' : EVM.State} (h : EVM.log2Op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.log2Op at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem log3Op_pc {s s' : EVM.State} (h : EVM.log3Op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.log3Op at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem log4Op_pc {s s' : EVM.State} (h : EVM.log4Op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.log4Op at h
+  split at h <;> first
+    | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+    | exact absurd h (by simp)
+theorem executionEnvOp_pc {op : ExecutionEnv .EVM → UInt256} {s s' : EVM.State} (h : EVM.executionEnvOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.executionEnvOp at h; simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl
+theorem machineStateOp_pc {op : MachineState → UInt256} {s s' : EVM.State} (h : EVM.machineStateOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.machineStateOp at h; simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl
+theorem stateOp_pc {op : EvmYul.State .EVM → UInt256} {s s' : EVM.State} (h : EVM.stateOp op s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EVM.stateOp at h; simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl
+theorem dup_pc {n : ℕ} {s s' : EVM.State} (h : EvmYul.dup n s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EvmYul.dup at h; simp only [] at h
+  by_cases hlen : (s.stack.take n).length = n
+  · rw [if_pos hlen] at h; injection h with h; subst h; rfl
+  · rw [if_neg hlen] at h; exact absurd h (by simp)
+theorem swap_pc {n : ℕ} {s s' : EVM.State} (h : EvmYul.swap n s = .ok s') : s'.pc = s.pc + UInt256.ofNat 1 := by
+  unfold EvmYul.swap at h; simp only [] at h
+  by_cases hlen : (s.stack.take (n + 1)).length = n + 1
+  · rw [if_pos hlen] at h; injection h with h; subst h; rfl
+  · rw [if_neg hlen] at h; exact absurd h (by simp)
+set_option maxHeartbeats 4000000 in
+theorem EvmYul_step_pc_eq_N
+    (op : Operation .EVM) (arg : Option (UInt256 × Nat)) (s s' : EVM.State)
+    (h_handled : handledByEvmYulStep op)
+    (h_ne_jump : op ≠ .JUMP) (h_ne_jumpi : op ≠ .JUMPI)
+    (h_ne_stop : op ≠ .STOP) (h_ne_ret : op ≠ .RETURN)
+    (h_ne_rev : op ≠ .REVERT) (h_nsd : op ≠ .SELFDESTRUCT)
+    (hargw : ∀ a' w', arg = some (a', w') → w' = argOnNBytesOfInstr op)
+    (h : EvmYul.step op arg s = .ok s') :
+    s'.pc = s.pc + UInt256.ofNat (argOnNBytesOfInstr op + 1) := by
+  obtain ⟨hne1, hne2, hne3, hne4, hne5, hne6⟩ := h_handled
+  cases op with
+  | Push o =>
+    cases o <;> (unfold EvmYul.step at h; simp only [Id.run] at h) <;>
+      first
+      | (injection h with h; subst h; rfl)
+      | (cases hae : arg with
+         | none => simp [hae] at h
+         | some p =>
+           obtain ⟨a', w'⟩ := p
+           simp [hae] at h; subst h
+           rw [hargw a' w' hae]; rfl)
+  | StopArith o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | CompBit o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | Keccak o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | Env o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | Block o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | StackMemFlow o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | Dup o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | Exchange o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | Log o => cases o <;> (try unfold EvmYul.step at h; try simp only [Id.run] at h) <;>
+    first
+      | exact absurd rfl h_ne_jump | exact absurd rfl h_ne_jumpi | exact absurd rfl h_ne_stop
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact execBinOp_pc h | exact execTriOp_pc h | exact execUnOp_pc h | exact execQuadOp_pc h
+      | exact executionEnvOp_pc h | exact unaryExecutionEnvOp_pc h | exact machineStateOp_pc h
+      | exact stateOp_pc h | exact binaryMachineStateOp_pc h | exact binaryMachineStateOp'_pc h
+      | exact ternaryMachineStateOp_pc h | exact unaryStateOp_pc h | exact binaryStateOp_pc h
+      | exact ternaryCopyOp_pc h | exact quaternaryCopyOp_pc h | exact dup_pc h | exact swap_pc h
+      | exact log0Op_pc h | exact log1Op_pc h | exact log2Op_pc h | exact log3Op_pc h | exact log4Op_pc h
+      | (injection h with h; subst h; rfl)
+      | (split at h <;> first
+          | (simp only [Id_run_ok, Except.ok.injEq] at h; subst h; rfl)
+          | (injection h with h; subst h; rfl)
+          | exact absurd h (by simp))
+      | exact absurd h (by simp [dispatchInvalid])
+  | System o =>
+    cases o <;>
+      first
+      | exact absurd rfl hne1 | exact absurd rfl hne2 | exact absurd rfl hne3
+      | exact absurd rfl hne4 | exact absurd rfl hne5 | exact absurd rfl hne6
+      | exact absurd rfl h_ne_ret | exact absurd rfl h_ne_rev | exact absurd rfl h_nsd
+      | (unfold EvmYul.step at h; simp only [Id.run] at h;
+         first
+           | exact binaryMachineStateOp_pc h
+           | exact absurd h (by simp [dispatchInvalid]))
+
 end Frame
 end EvmYul
