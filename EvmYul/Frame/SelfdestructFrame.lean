@@ -623,6 +623,139 @@ theorem selfdestruct_storageSum_at_ne_Iₐ_eq
   case _ hPop =>
     simp at h
 
+/-! ## SELFDESTRUCT storage-PROJECTION preservation (§H.2 leaf, per-slot form)
+
+`selfdestruct_storageSum_at_ne_Iₐ_eq` frames `storageSum · C` (a `Nat`)
+across a foreign SELFDESTRUCT. Consumers that carry a *per-slot* storage
+invariant (e.g. `slot0 + slot1` read individually) need the stronger
+projection `(find? C).map (·.storage)` preserved, not just the sum.
+
+That is preserved in every accountMap-changing shape whose beneficiary
+insert **re-uses** the key's original storage (cases 4 / 5A). The one
+shape that does NOT re-use storage is case 3 (beneficiary `r` was absent,
+so it receives a *fresh default* account): there the raw projection at
+`C = r` jumps `none → some ∅` — the sums still agree (both `0`) but the
+projections differ. So the projection form additionally requires `C` to
+be **present** in the pre-state, which rules `r = C` out of case 3
+(`find? r = none` contradicts `find? C = some _`). Contracts carrying a
+storage invariant always know their own account is present, so this is
+free at the call site. -/
+
+/-- Two inserts at `r`, `Iₐ` where the `r`-insert re-uses the original
+storage (`acc_r'.storage = acc_r.storage`, `σ.find? r = some acc_r`):
+the `find? C` storage projection is preserved for `Iₐ ≠ C`. Handles
+`r = C` (re-use) and `r ≠ C` (frame) uniformly; no presence needed. -/
+private theorem storage_proj_double_insert_reuse
+    (σ : AccountMap .EVM) (r Iₐ C : AccountAddress)
+    (acc_r acc_r' acc_Iₐ' : Account .EVM)
+    (hStg_r : acc_r'.storage = acc_r.storage)
+    (hRfind : σ.find? r = some acc_r)
+    (hIₐC : Iₐ ≠ C) :
+    (((σ.insert r acc_r').insert Iₐ acc_Iₐ').find? C).map (·.storage)
+      = (σ.find? C).map (·.storage) := by
+  by_cases hrC : r = C
+  · subst hrC
+    rw [find?_insert_ne _ _ _ _ hIₐC, find?_insert_self, hRfind]
+    simp only [Option.map_some, hStg_r]
+  · rw [find?_insert_ne _ _ _ _ hIₐC, find?_insert_ne _ _ _ _ hrC]
+
+/-- Two inserts at `r ≠ C`, `Iₐ ≠ C`: both frame the `find? C` projection
+(case 3, where `r` is absent and gets a fresh default account — used only
+after `r ≠ C` is derived from `C`'s presence). -/
+private theorem storage_proj_double_insert_frame
+    (σ : AccountMap .EVM) (r Iₐ C : AccountAddress) (newR newIₐ : Account .EVM)
+    (hrC : r ≠ C) (hIₐC : Iₐ ≠ C) :
+    (((σ.insert r newR).insert Iₐ newIₐ).find? C).map (·.storage)
+      = (σ.find? C).map (·.storage) := by
+  rw [find?_insert_ne _ _ _ _ hIₐC, find?_insert_ne _ _ _ _ hrC]
+
+/-- **Per-slot companion of `selfdestruct_storageSum_at_ne_Iₐ_eq`.** A
+foreign SELFDESTRUCT (`Iₐ ≠ C`) preserves the storage PROJECTION of
+`find? C` — hence every individual slot read at `C`, not just the sum —
+provided `C` is present in the pre-state (which excludes the fresh-default
+case-3 shape at `r = C`). -/
+theorem selfdestruct_storage_proj_at_ne_Iₐ_eq
+    (s s' : EVM.State) (C : AccountAddress) (acc : Account .EVM)
+    (h : EvmYul.step (.SELFDESTRUCT : Operation .EVM) .none s = .ok s')
+    (hne : C ≠ s.executionEnv.codeOwner)
+    (hCpresent : s.accountMap.find? C = some acc) :
+    ((s'.accountMap.find? C).map (·.storage))
+      = ((s.accountMap.find? C).map (·.storage)) := by
+  unfold EvmYul.step at h
+  simp only [Id.run] at h
+  set Iₐ := s.executionEnv.codeOwner with hIₐ_def
+  have hIₐC : Iₐ ≠ C := fun heq => hne heq.symm
+  split at h
+  case _ stk μ₁ hPop =>
+    set r : AccountAddress := AccountAddress.ofUInt256 μ₁ with hr_def
+    split at h
+    case _ hCreated =>
+      split at h
+      case _ hLookIₐ =>
+        simp only [Except.ok.injEq] at h; subst h; rfl
+      case _ σ_Iₐ hLookIₐ =>
+        have hIₐfind : s.accountMap.find? Iₐ = some σ_Iₐ := hLookIₐ
+        split at h
+        case _ hLookR =>
+          have hRfind_none : s.accountMap.find? r = none := hLookR
+          have hrC : r ≠ C := fun heq => by rw [heq, hCpresent] at hRfind_none; cases hRfind_none
+          split at h
+          case isTrue hBal =>
+            simp only [Except.ok.injEq] at h; subst h; rfl
+          case isFalse hBal =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.storage) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact storage_proj_double_insert_frame s.accountMap r Iₐ C
+              { (default : Account .EVM) with balance := σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } hrC hIₐC
+        case _ σ_r hLookR =>
+          have hRfind : s.accountMap.find? r = some σ_r := hLookR
+          split at h
+          case isTrue hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.storage) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact storage_proj_double_insert_reuse s.accountMap r Iₐ C σ_r
+              { σ_r with balance := σ_r.balance + σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } rfl hRfind hIₐC
+          case isFalse hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.storage) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact storage_proj_double_insert_reuse s.accountMap r Iₐ C σ_r
+              { σ_r with balance := ⟨0⟩ }
+              { σ_Iₐ with balance := ⟨0⟩ } rfl hRfind hIₐC
+    case _ hNotCreated =>
+      split at h
+      case _ hLookIₐ =>
+        simp only [Except.ok.injEq] at h; subst h; rfl
+      case _ σ_Iₐ hLookIₐ =>
+        have hIₐfind : s.accountMap.find? Iₐ = some σ_Iₐ := hLookIₐ
+        split at h
+        case _ hLookR =>
+          have hRfind_none : s.accountMap.find? r = none := hLookR
+          have hrC : r ≠ C := fun heq => by rw [heq, hCpresent] at hRfind_none; cases hRfind_none
+          split at h
+          case isTrue hBal =>
+            simp only [Except.ok.injEq] at h; subst h; rfl
+          case isFalse hBal =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.storage) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact storage_proj_double_insert_frame s.accountMap r Iₐ C
+              { (default : Account .EVM) with balance := σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } hrC hIₐC
+        case _ σ_r hLookR =>
+          have hRfind : s.accountMap.find? r = some σ_r := hLookR
+          split at h
+          case isTrue hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.storage) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact storage_proj_double_insert_reuse s.accountMap r Iₐ C σ_r
+              { σ_r with balance := σ_r.balance + σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } rfl hRfind hIₐC
+          case isFalse hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h; rfl
+  case _ hPop =>
+    simp at h
+
 /-- SELFDESTRUCT step preserves `SubstateSDExclude C` of the substate
 when the executing-frame address `Iₐ ≠ C`.
 

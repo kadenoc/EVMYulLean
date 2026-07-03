@@ -144,6 +144,35 @@ theorem EvmYul_step_storageSum_eq_of_ne_codeOwner
   · exact storageSum_of_storage_proj_eq
       (EvmYul.step_modifies_storage_only_at_codeOwner op arg s s' C h_handled hSD h h_ne)
 
+/-- **Per-slot foreign-frame step leaf.** The storage-PROJECTION twin of
+`EvmYul_step_storageSum_eq_of_ne_codeOwner`: at `C ≠ codeOwner`, any handled
+`EvmYul.step` — SELFDESTRUCT included — leaves the whole storage projection
+`(find? C).map (·.storage)` unchanged (hence every individual slot read at `C`,
+not just the `Nat` sum). SELFDESTRUCT needs `C` present in the pre-state to
+exclude the fresh-default beneficiary shape (see
+`selfdestruct_storage_proj_at_ne_Iₐ_eq`); every consumer carrying a per-slot
+storage invariant knows its own account is present, so this is free. -/
+theorem EvmYul_step_storage_proj_eq_of_ne_codeOwner
+    (op : Operation .EVM) (arg : Option (UInt256 × Nat))
+    (s s' : EVM.State) (C : AccountAddress) (acc : Account .EVM)
+    (h_ne : C ≠ s.executionEnv.codeOwner)
+    (h_handled : EvmYul.Frame.handledByEvmYulStep op)
+    (hCpresent : s.accountMap.find? C = some acc)
+    (h : EvmYul.step op arg s = .ok s') :
+    ((s'.accountMap.find? C).map (·.storage))
+      = ((s.accountMap.find? C).map (·.storage)) := by
+  by_cases hSD : op = .SELFDESTRUCT
+  · subst hSD
+    have h' : EvmYul.step (.SELFDESTRUCT : Operation .EVM) .none s = .ok s' := by
+      have harg : EvmYul.step (.SELFDESTRUCT : Operation .EVM) arg s
+          = EvmYul.step (.SELFDESTRUCT : Operation .EVM) .none s := by
+        unfold EvmYul.step
+        rfl
+      rw [← harg]
+      exact h
+    exact selfdestruct_storage_proj_at_ne_Iₐ_eq s s' C acc h' h_ne hCpresent
+  · exact EvmYul.step_modifies_storage_only_at_codeOwner op arg s s' C h_handled hSD h h_ne
+
 /-- `EVM.step`'s fallthrough arm (gas already deducted) preserves `storageSum`
 at `C ≠ codeOwner` — the storage twin of `EVM_step_fallthrough_ge`. -/
 theorem EVM_step_fallthrough_storageSum_eq
