@@ -76,6 +76,28 @@ theorem step_fuel_irrel
       | exact absurd rfl h4 | exact absurd rfl h5 | exact absurd rfl h6
   all_goals rfl
 
+set_option maxHeartbeats 4000000 in
+/-- **`EVM.step` reduces to `EvmYul.step` for a non-system op.** `EVM.step (f+1) gasCost
+`(some (op, arg)) s` for any op outside the six CALL/CREATE-family arms is exactly
+`EvmYul.step op arg` on `s` with `execLength` bumped and `gasAvailable` decremented by
+`gasCost` — the interpreter's fall-through arm. Lets a consumer reason about `EVM.step`
+(what `X` calls) through the `EvmYul.step` frame lemmas (pc/accountMap/executionEnv). -/
+theorem EVM_step_nonsys
+    (op : Operation .EVM) (arg : Option (UInt256 × Nat)) (gasCost f : ℕ) (s : EVM.State)
+    (h1 : op ≠ .CREATE) (h2 : op ≠ .CREATE2) (h3 : op ≠ .CALL)
+    (h4 : op ≠ .CALLCODE) (h5 : op ≠ .DELEGATECALL) (h6 : op ≠ .STATICCALL) :
+    EVM.step (f + 1) gasCost (some (op, arg)) s
+      = EvmYul.step op arg
+          { s with execLength := s.execLength + 1,
+                   gasAvailable := s.gasAvailable - UInt256.ofNat gasCost } := by
+  cases op
+  case System sysOp =>
+    cases sysOp <;> first
+      | rfl
+      | exact absurd rfl h1 | exact absurd rfl h2 | exact absurd rfl h3
+      | exact absurd rfl h4 | exact absurd rfl h5 | exact absurd rfl h6
+  all_goals rfl
+
 /-- `X_balance_ge` at fuel 0: trivial because `X 0 _ _ = .error`. The
 match on the result reduces to `True` in the `.error` branch, which
 is discharged by `trivial`. -/
