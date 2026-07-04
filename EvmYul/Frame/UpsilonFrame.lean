@@ -473,17 +473,20 @@ private theorem balanceOf_tstorage_wipe_eq_aux
     -- Now: (σ₁.insert a' {acc with tstorage := ∅}).find? C = some {acc with tstorage := ∅}
     exact Batteries.RBMap.find?_insert_of_eq _ haEq
 
-/-- Storage-sum companion of `balanceOf_tstorage_wipe_eq_aux`:
-the tstorage-wipe map preserves `storageSum C`. The wipe replaces
-`tstorage` with `∅` and leaves `.storage` untouched, so the foldl-sum
-over `.storage` is unchanged at every account. -/
-private theorem storageSum_tstorage_wipe_eq_aux
+/-- The tstorage-wipe map preserves `find? C` up to the tstorage-field
+rewrite: the wiped map's account at `C` is the original account at `C`
+with `tstorage` set to `∅`. Since the wipe only rewrites `tstorage`,
+the persistent `.storage` projection is untouched. Public so slot-level
+conserved-quantity clients (e.g. `slot01SumAt`) can reuse it, mirroring
+the storageSum companion `storageSum_tstorage_wipe_eq`. -/
+theorem find?_tstorage_wipe_eq
     (σ : AccountMap .EVM) (C : AccountAddress) :
-    storageSum
-      (σ.map fun (addr, acc) => (addr, { acc with tstorage := RBMap.empty })) C
-      = storageSum σ C := by
-  -- Same machinery as `balanceOf_tstorage_wipe_eq_aux`, but reduce to
-  -- `storageSum`'s find?+foldl-over-storage shape.
+    Batteries.RBMap.find?
+        ((σ.map fun (addr, acc) => (addr, { acc with tstorage := (RBMap.empty : Storage) })) :
+          AccountMap .EVM) C
+      = (σ.find? C).map
+          (fun (a : Account .EVM) =>
+            ({ a with tstorage := (RBMap.empty : Storage) } : Account .EVM)) := by
   have hMapEq :
       (σ.map fun (addr, acc) => (addr, { acc with tstorage := (RBMap.empty : Storage) }))
         = σ.toList.foldl
@@ -494,18 +497,6 @@ private theorem storageSum_tstorage_wipe_eq_aux
     rw [Batteries.RBSet.foldl_eq_foldl_toList]
     rfl
   rw [hMapEq]
-  -- It suffices to show find?-equality up to the (·.storage) projection.
-  suffices h : (σ.toList.foldl
-      (fun m p => m.insert p.1 { p.2 with tstorage := (RBMap.empty : Storage) })
-      (∅ : AccountMap .EVM)).find? C
-    = (σ.find? C).map
-        (fun (a : Account .EVM) =>
-          ({ a with tstorage := (RBMap.empty : Storage) } : Account .EVM)) by
-    unfold storageSum
-    rw [h]
-    rcases σ.find? C with _ | a
-    · rfl
-    · rfl
   rcases hf : σ.find? C with _ | acc
   · -- none: foldl result has find? C = none.
     have h_ne : ∀ p ∈ σ.toList, compare C p.1 ≠ .eq := by
@@ -561,6 +552,19 @@ private theorem storageSum_tstorage_wipe_eq_aux
     -- Goal: some {acc with tstorage := ∅}.storage.map _ = some acc.storage.map _
     -- Both are `acc.storage` because tstorage update doesn't touch storage.
     rfl
+
+/-- Storage-sum companion of `find?_tstorage_wipe_eq`:
+the tstorage-wipe map preserves `storageSum C`. -/
+private theorem storageSum_tstorage_wipe_eq_aux
+    (σ : AccountMap .EVM) (C : AccountAddress) :
+    storageSum
+      (σ.map fun (addr, acc) => (addr, { acc with tstorage := RBMap.empty })) C
+      = storageSum σ C := by
+  unfold storageSum
+  rw [find?_tstorage_wipe_eq]
+  rcases σ.find? C with _ | a
+  · rfl
+  · rfl
 
 end Internal
 
@@ -1138,6 +1142,96 @@ theorem Υ_tail_storageSum_eq
   · rw [storageSum_increaseBalance_ne _ _ _ _ hBen.symm,
         storageSum_increaseBalance_ne _ _ _ _ hS_T.symm]
   · rw [storageSum_increaseBalance_ne _ _ _ _ hS_T.symm]
+
+/-! ### Storage-projection tail lemmas
+
+These mirror the `storageSum` tail lemmas but conclude at the level of the
+`(·.storage)` projection of `find? C`, i.e. `(σ.find? C).map (·.storage)`. Any
+conserved quantity that is a function of the persistent storage at `C` alone
+(e.g. `slot0 + slot1`) can be projected off `Υ_tail_find?_storage_proj_eq`
+without re-deriving the tail navigation. The tstorage wipe is transparent
+because it leaves `.storage` untouched. -/
+
+/-- `increaseBalance` at a key `≠ C` preserves `find? C`. -/
+theorem find?_increaseBalance_ne
+    (σ : AccountMap .EVM) (k C : AccountAddress) (v : UInt256) (h : k ≠ C) :
+    (σ.increaseBalance .EVM k v).find? C = σ.find? C := by
+  unfold AccountMap.increaseBalance
+  split <;> exact find?_insert_ne _ _ _ _ h
+
+/-- Storage-projection mirror of `storageSum_tail_generic`. -/
+theorem find?_storage_proj_tail_generic
+    (σ_F : AccountMap .EVM) (A : Substate) (C : AccountAddress)
+    (hSD_ne : ∀ k ∈ A.selfDestructSet.1.toList, k ≠ C)
+    (hDead_ne : ∀ k ∈ A.touchedAccounts.filter (State.dead σ_F ·), k ≠ C) :
+    (Batteries.RBMap.find?
+        (((A.touchedAccounts.filter (State.dead σ_F ·)).foldl Batteries.RBMap.erase
+          (A.selfDestructSet.1.foldl Batteries.RBMap.erase σ_F)
+          |>.map (fun (addr, acc) => (addr, { acc with tstorage := RBMap.empty }))) :
+            AccountMap .EVM) C).map
+        (·.storage)
+      = (σ_F.find? C).map (·.storage) := by
+  rw [Internal.find?_tstorage_wipe_eq]
+  rw [find?_erase_rbset_foldl_ne _ _ C hDead_ne, find?_erase_rbnode_foldl_ne _ _ C hSD_ne]
+  rcases σ_F.find? C with _ | a
+  · rfl
+  · rfl
+
+/-- Storage-projection mirror of `Υ_tail_storageSum_eq`: the pure tail of Υ
+preserves the `(·.storage)` projection of `find? C`. -/
+theorem Υ_tail_find?_storage_proj_eq
+    (σ_P : AccountMap .EVM) (g' : UInt256) (A : Substate)
+    (H : BlockHeader) (H_f : ℕ) (tx : Transaction)
+    (S_T C : AccountAddress)
+    (hS_T : C ≠ S_T)
+    (hBen : C ≠ H.beneficiary)
+    (hSD : ∀ k ∈ A.selfDestructSet.1.toList, k ≠ C)
+    (hDeadGated :
+       ∀ σ_F : AccountMap .EVM, State.dead σ_F C = false →
+         ∀ k ∈ A.touchedAccounts.filter (State.dead σ_F ·), k ≠ C)
+    (hDead_σP : State.dead σ_P C = false) :
+    ((Υ_tail_state σ_P g' A H H_f tx S_T).find? C).map (·.storage)
+      = (σ_P.find? C).map (·.storage) := by
+  unfold Υ_tail_state
+  simp only
+  generalize
+    ((g' + min ((tx.base.gasLimit - g') / ⟨5⟩) A.refundBalance) *
+      (match tx with
+       | .legacy t | .access t => t.gasPrice
+       | .dynamic _ | .blob _ =>
+            (match tx with
+             | .legacy t | .access t => t.gasPrice - .ofNat H_f
+             | .dynamic t | .blob t =>
+                   min t.maxPriorityFeePerGas (t.maxFeePerGas - .ofNat H_f)) +
+            .ofNat H_f)) = payFee
+  generalize
+    ((tx.base.gasLimit -
+        (g' + min ((tx.base.gasLimit - g') / ⟨5⟩) A.refundBalance)) *
+       (match tx with
+        | .legacy t | .access t => t.gasPrice - .ofNat H_f
+        | .dynamic t | .blob t =>
+              min t.maxPriorityFeePerGas (t.maxFeePerGas - .ofNat H_f))) = benFee
+  set σStar' : AccountMap .EVM :=
+    if benFee != ⟨0⟩
+      then (σ_P.increaseBalance .EVM S_T payFee).increaseBalance .EVM
+            H.beneficiary benFee
+      else σ_P.increaseBalance .EVM S_T payFee with hσStar'_def
+  have hDead_σStar' : State.dead σStar' C = false := by
+    rw [hσStar'_def]
+    split
+    · rw [dead_increaseBalance_ne _ _ _ _ hBen.symm,
+          dead_increaseBalance_ne _ _ _ _ hS_T.symm]
+      exact hDead_σP
+    · rw [dead_increaseBalance_ne _ _ _ _ hS_T.symm]
+      exact hDead_σP
+  have hDead_at := hDeadGated σStar' hDead_σStar'
+  rw [find?_storage_proj_tail_generic _ A C hSD hDead_at]
+  show (σStar'.find? C).map (·.storage) = (σ_P.find? C).map (·.storage)
+  rw [hσStar'_def]
+  split
+  · rw [find?_increaseBalance_ne _ _ _ _ hBen.symm,
+        find?_increaseBalance_ne _ _ _ _ hS_T.symm]
+  · rw [find?_increaseBalance_ne _ _ _ _ hS_T.symm]
 
 end Frame
 end EvmYul
