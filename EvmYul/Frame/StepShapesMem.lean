@@ -552,6 +552,42 @@ theorem step_DUP4_shape_mem
   subst hStep
   exact ⟨rfl, rfl⟩
 
+theorem step_DUP5_shape_mem
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 hd3 hd4 hd5 : UInt256) (tl : Stack UInt256)
+    (hStk : s.stack = hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.DUP5, arg)) s = .ok s') :
+    s'.toMachineState.memory = s.toMachineState.memory ∧
+    s'.toMachineState.activeWords = s.toMachineState.activeWords := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dup at hStep
+  rw [hStk] at hStep
+  simp only [show List.take 5 (hd1 :: hd2 :: hd3 :: hd4 :: hd5 :: tl)
+                = [hd1, hd2, hd3, hd4, hd5] from rfl,
+             show ([hd1, hd2, hd3, hd4, hd5] : List UInt256).length = 5 from rfl,
+             ↓reduceIte, Except.ok.injEq] at hStep
+  subst hStep
+  exact ⟨rfl, rfl⟩
+
+theorem step_AND_shape_mem
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd1 :: hd2 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.AND, arg)) s = .ok s') :
+    s'.toMachineState.memory = s.toMachineState.memory ∧
+    s'.toMachineState.activeWords = s.toMachineState.activeWords := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dispatchBinary EVM.execBinOp at hStep
+  rw [hStk] at hStep
+  simp only [Stack.pop2, Id_run_ok, Except.ok.injEq] at hStep
+  subst hStep
+  exact ⟨rfl, rfl⟩
+
 theorem step_DUP6_shape_mem
     (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
     (hd1 hd2 hd3 hd4 hd5 hd6 : UInt256) (tl : Stack UInt256)
