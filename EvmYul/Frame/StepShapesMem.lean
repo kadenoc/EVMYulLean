@@ -205,6 +205,22 @@ theorem step_SHL_shape_mem
   subst hStep
   exact ⟨rfl, rfl⟩
 
+theorem step_SAR_shape_mem
+    (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
+    (hd1 hd2 : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd1 :: hd2 :: tl)
+    (hStep : EVM.step (f' + 1) cost (some (.SAR, arg)) s = .ok s') :
+    s'.toMachineState.memory = s.toMachineState.memory ∧
+    s'.toMachineState.activeWords = s.toMachineState.activeWords := by
+  unfold EVM.step at hStep
+  simp only [bind, Except.bind, pure, Except.pure] at hStep
+  unfold EvmYul.step at hStep
+  simp only [Id.run] at hStep
+  unfold dispatchBinary EVM.execBinOp at hStep
+  rw [hStk] at hStep
+  simp only [Stack.pop2, Id_run_ok, Except.ok.injEq] at hStep
+  subst hStep
+  exact ⟨rfl, rfl⟩
+
 theorem step_ADD_shape_mem
     (s s' : EVM.State) (f' cost : ℕ) (arg : Option (UInt256 × Nat))
     (hd1 hd2 : UInt256) (tl : Stack UInt256) (hStk : s.stack = hd1 :: hd2 :: tl)
