@@ -696,6 +696,31 @@ def Υ_σ₀ (σ : AccountMap .EVM) (H_f : ℕ) (S_T : AccountAddress)
     (H : BlockHeader) (tx : Transaction) : AccountMap .EVM :=
   σ.insert S_T (Υ_newSender σ H_f S_T H tx)
 
+/-- The available gas `g` handed to the Θ/Λ body (intrinsic gas debited). -/
+def Υ_g (tx : Transaction) : UInt256 :=
+  .ofNat <| tx.base.gasLimit.toNat - EVM.intrinsicGas tx
+
+/-- The accrued substate `A*` handed to the Θ/Λ body (pre-warmed access lists). -/
+def Υ_AStar (S_T : AccountAddress) (H : BlockHeader) (tx : Transaction) : Substate :=
+  { A0 with
+      accessedAccounts :=
+        match tx.base.recipient with
+          | some t =>
+            (A0.accessedAccounts.insert S_T
+              |>.insert H.beneficiary
+              |>.union <| Batteries.RBSet.ofList (tx.getAccessList.map Prod.fst) compare).insert t
+          | none =>
+            A0.accessedAccounts.insert S_T
+              |>.insert H.beneficiary
+              |>.union <| Batteries.RBSet.ofList (tx.getAccessList.map Prod.fst) compare
+      accessedStorageKeys :=
+        Batteries.RBSet.ofList
+          (do
+            let ⟨Eₐ, Eₛ⟩ ← tx.getAccessList
+            let eₛ ← Eₛ.toList
+            pure (Eₐ, eₛ))
+          Substate.storageKeysCmp }
+
 /-- Predicate: `σ, tx, H, H_f` is a valid Υ input.
 
 In addition to the standard upfront-cost bound, we package three
@@ -975,6 +1000,95 @@ def ΥBodyFactors (σ : AccountMap .EVM) (fuel H_f : ℕ)
         balanceOf σ_P C ≥ balanceOf σ C ∧
         State.dead σ_P C = false
   | .error _ => True
+
+/-- **Υ reduction, recipient = `some t` (the CALL case).** `EVM.Υ` re-expressed
+with its `Θ` dispatch and tail written entirely in the named component defs
+(`Υ_σ₀`/`Υ_AStar`/`Υ_g`/`Υ_p`/`Υ_tail_state`). Proved by `rfl` native-side, so
+clients can `rw` it and then `cases` the `Θ` call without byte-reproducing `Υ`'s
+inlined fee arithmetic. -/
+theorem Υ_eq_some
+    (fuel : ℕ) (σ : AccountMap .EVM) (H_f : ℕ)
+    (H H_gen : BlockHeader) (blocks : ProcessedBlocks) (tx : Transaction)
+    (S_T t : AccountAddress) (hrec : tx.base.recipient = some t) :
+    EVM.Υ fuel σ H_f H H_gen blocks tx S_T =
+      (match EVM.Θ fuel tx.blobVersionedHashes Batteries.RBSet.empty H_gen blocks
+          (Υ_σ₀ σ H_f S_T H tx) (Υ_σ₀ σ H_f S_T H tx) (Υ_AStar S_T H tx) S_T S_T t
+          (toExecute .EVM (Υ_σ₀ σ H_f S_T H tx) t) (Υ_g tx) (Υ_p H_f tx)
+          tx.base.value tx.base.value tx.base.data 0 H true with
+       | .ok (_, σ_P, g', A, z, _) =>
+           .ok (Υ_tail_state σ_P g' A H H_f tx S_T, A, z,
+                tx.base.gasLimit - (g' + min ((tx.base.gasLimit - g') / ⟨5⟩) A.refundBalance))
+       | .error e => .error (.ExecutionException e)) := by
+  unfold EVM.Υ
+  simp only [hrec, bind, Except.bind, pure, Except.pure,
+    Υ_σ₀, Υ_newSender, Υ_p, Υ_AStar, Υ_g, Υ_tail_state]
+  rfl
+
+/-- Existential form of `Υ_eq_some`: extracts the `Θ`-body result and the tail
+identity from a successful `Υ`. -/
+theorem Υ_ok_some
+    (fuel : ℕ) (σ : AccountMap .EVM) (H_f : ℕ)
+    (H H_gen : BlockHeader) (blocks : ProcessedBlocks) (tx : Transaction)
+    (S_T t : AccountAddress) (hrec : tx.base.recipient = some t)
+    (σ' : AccountMap .EVM) (A' : Substate) (z : Bool) (gu : UInt256)
+    (hΥ : EVM.Υ fuel σ H_f H H_gen blocks tx S_T = .ok (σ', A', z, gu)) :
+    ∃ σ_P g' b z2 out,
+      EVM.Θ fuel tx.blobVersionedHashes Batteries.RBSet.empty H_gen blocks
+        (Υ_σ₀ σ H_f S_T H tx) (Υ_σ₀ σ H_f S_T H tx) (Υ_AStar S_T H tx) S_T S_T t
+        (toExecute .EVM (Υ_σ₀ σ H_f S_T H tx) t) (Υ_g tx) (Υ_p H_f tx)
+        tx.base.value tx.base.value tx.base.data 0 H true
+        = .ok (b, σ_P, g', A', z2, out)
+      ∧ σ' = Υ_tail_state σ_P g' A' H H_f tx S_T := by
+  rw [Υ_eq_some fuel σ H_f H H_gen blocks tx S_T t hrec] at hΥ
+  split at hΥ
+  · rename_i fst σ_P g' A z2 out heq
+    simp only [Except.ok.injEq, Prod.mk.injEq] at hΥ
+    obtain ⟨e1, e2, e3, e4⟩ := hΥ
+    subst e2
+    exact ⟨σ_P, g', fst, z2, out, heq, e1.symm⟩
+  · exact absurd hΥ (by simp)
+
+/-- **Υ reduction, recipient = `none` (the CREATE case).** As `Υ_eq_some`, but the
+body is the `Lambda` (contract-creation) dispatch. Proved by `rfl` native-side. -/
+theorem Υ_eq_none
+    (fuel : ℕ) (σ : AccountMap .EVM) (H_f : ℕ)
+    (H H_gen : BlockHeader) (blocks : ProcessedBlocks) (tx : Transaction)
+    (S_T : AccountAddress) (hrec : tx.base.recipient = none) :
+    EVM.Υ fuel σ H_f H H_gen blocks tx S_T =
+      (match EVM.Lambda fuel tx.blobVersionedHashes Batteries.RBSet.empty H_gen blocks
+          (Υ_σ₀ σ H_f S_T H tx) (Υ_σ₀ σ H_f S_T H tx) (Υ_AStar S_T H tx) S_T S_T
+          (Υ_g tx) (Υ_p H_f tx) tx.base.value tx.base.data ⟨0⟩ none H true with
+       | .ok (_, _, σ_P, g', A, z, _) =>
+           .ok (Υ_tail_state σ_P g' A H H_f tx S_T, A, z,
+                tx.base.gasLimit - (g' + min ((tx.base.gasLimit - g') / ⟨5⟩) A.refundBalance))
+       | .error e => .error (.ExecutionException e)) := by
+  unfold EVM.Υ
+  simp only [hrec, bind, Except.bind, pure, Except.pure,
+    Υ_σ₀, Υ_newSender, Υ_p, Υ_AStar, Υ_g, Υ_tail_state]
+  rfl
+
+/-- Existential form of `Υ_eq_none`: extracts the `Lambda`-body result and the
+tail identity from a successful `Υ`. -/
+theorem Υ_ok_none
+    (fuel : ℕ) (σ : AccountMap .EVM) (H_f : ℕ)
+    (H H_gen : BlockHeader) (blocks : ProcessedBlocks) (tx : Transaction)
+    (S_T : AccountAddress) (hrec : tx.base.recipient = none)
+    (σ' : AccountMap .EVM) (A' : Substate) (z : Bool) (gu : UInt256)
+    (hΥ : EVM.Υ fuel σ H_f H H_gen blocks tx S_T = .ok (σ', A', z, gu)) :
+    ∃ σ_P g' b1 b2 z2 out,
+      EVM.Lambda fuel tx.blobVersionedHashes Batteries.RBSet.empty H_gen blocks
+        (Υ_σ₀ σ H_f S_T H tx) (Υ_σ₀ σ H_f S_T H tx) (Υ_AStar S_T H tx) S_T S_T
+        (Υ_g tx) (Υ_p H_f tx) tx.base.value tx.base.data ⟨0⟩ none H true
+        = .ok (b1, b2, σ_P, g', A', z2, out)
+      ∧ σ' = Υ_tail_state σ_P g' A' H H_f tx S_T := by
+  rw [Υ_eq_none fuel σ H_f H H_gen blocks tx S_T hrec] at hΥ
+  split at hΥ
+  · rename_i b1 b2 σ_P g' A z2 out heq
+    simp only [Except.ok.injEq, Prod.mk.injEq] at hΥ
+    obtain ⟨e1, e2, e3, e4⟩ := hΥ
+    subst e2
+    exact ⟨σ_P, g', b1, b2, z2, out, heq, e1.symm⟩
+  · exact absurd hΥ (by simp)
 
 /-- Υ's transaction-level balance frame, proved from the body
 factorisation and tail-invariant hypotheses.
