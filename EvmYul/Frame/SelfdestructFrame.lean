@@ -756,6 +756,155 @@ theorem selfdestruct_storage_proj_at_ne_Iₐ_eq
   case _ hPop =>
     simp at h
 
+/-- Code companion of `storage_proj_double_insert_reuse`: two inserts at `r`, `Iₐ` where the
+`r`-insert re-uses the original code, `Iₐ ≠ C`. Preserves the `find? C` code projection. -/
+private theorem code_proj_double_insert_reuse
+    (σ : AccountMap .EVM) (r Iₐ C : AccountAddress)
+    (acc_r acc_r' acc_Iₐ' : Account .EVM)
+    (hCode_r : acc_r'.code = acc_r.code)
+    (hRfind : σ.find? r = some acc_r)
+    (hIₐC : Iₐ ≠ C) :
+    (((σ.insert r acc_r').insert Iₐ acc_Iₐ').find? C).map (·.code)
+      = (σ.find? C).map (·.code) := by
+  by_cases hrC : r = C
+  · subst hrC
+    rw [find?_insert_ne _ _ _ _ hIₐC, find?_insert_self, hRfind]
+    simp only [Option.map_some, hCode_r]
+  · rw [find?_insert_ne _ _ _ _ hIₐC, find?_insert_ne _ _ _ _ hrC]
+
+/-- Code companion of `storage_proj_double_insert_frame`: two inserts at `r ≠ C`, `Iₐ ≠ C`. -/
+private theorem code_proj_double_insert_frame
+    (σ : AccountMap .EVM) (r Iₐ C : AccountAddress) (newR newIₐ : Account .EVM)
+    (hrC : r ≠ C) (hIₐC : Iₐ ≠ C) :
+    (((σ.insert r newR).insert Iₐ newIₐ).find? C).map (·.code)
+      = (σ.find? C).map (·.code) := by
+  rw [find?_insert_ne _ _ _ _ hIₐC, find?_insert_ne _ _ _ _ hrC]
+
+/-- **Code companion of `selfdestruct_storage_proj_at_ne_Iₐ_eq`.** A foreign SELFDESTRUCT
+(`Iₐ ≠ C`) preserves the code PROJECTION of `find? C` (SELFDESTRUCT only rewrites balances). -/
+theorem selfdestruct_code_proj_at_ne_Iₐ_eq
+    (s s' : EVM.State) (C : AccountAddress) (acc : Account .EVM)
+    (h : EvmYul.step (.SELFDESTRUCT : Operation .EVM) .none s = .ok s')
+    (hne : C ≠ s.executionEnv.codeOwner)
+    (hCpresent : s.accountMap.find? C = some acc) :
+    ((s'.accountMap.find? C).map (·.code))
+      = ((s.accountMap.find? C).map (·.code)) := by
+  unfold EvmYul.step at h
+  simp only [Id.run] at h
+  set Iₐ := s.executionEnv.codeOwner with hIₐ_def
+  have hIₐC : Iₐ ≠ C := fun heq => hne heq.symm
+  split at h
+  case _ stk μ₁ hPop =>
+    set r : AccountAddress := AccountAddress.ofUInt256 μ₁ with hr_def
+    split at h
+    case _ hCreated =>
+      split at h
+      case _ hLookIₐ =>
+        simp only [Except.ok.injEq] at h; subst h; rfl
+      case _ σ_Iₐ hLookIₐ =>
+        split at h
+        case _ hLookR =>
+          have hRfind_none : s.accountMap.find? r = none := hLookR
+          have hrC : r ≠ C := fun heq => by rw [heq, hCpresent] at hRfind_none; cases hRfind_none
+          split at h
+          case isTrue hBal =>
+            simp only [Except.ok.injEq] at h; subst h; rfl
+          case isFalse hBal =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.code) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact code_proj_double_insert_frame s.accountMap r Iₐ C
+              { (default : Account .EVM) with balance := σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } hrC hIₐC
+        case _ σ_r hLookR =>
+          have hRfind : s.accountMap.find? r = some σ_r := hLookR
+          split at h
+          case isTrue hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.code) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact code_proj_double_insert_reuse s.accountMap r Iₐ C σ_r
+              { σ_r with balance := σ_r.balance + σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } rfl hRfind hIₐC
+          case isFalse hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.code) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact code_proj_double_insert_reuse s.accountMap r Iₐ C σ_r
+              { σ_r with balance := ⟨0⟩ }
+              { σ_Iₐ with balance := ⟨0⟩ } rfl hRfind hIₐC
+    case _ hNotCreated =>
+      split at h
+      case _ hLookIₐ =>
+        simp only [Except.ok.injEq] at h; subst h; rfl
+      case _ σ_Iₐ hLookIₐ =>
+        split at h
+        case _ hLookR =>
+          have hRfind_none : s.accountMap.find? r = none := hLookR
+          have hrC : r ≠ C := fun heq => by rw [heq, hCpresent] at hRfind_none; cases hRfind_none
+          split at h
+          case isTrue hBal =>
+            simp only [Except.ok.injEq] at h; subst h; rfl
+          case isFalse hBal =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.code) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact code_proj_double_insert_frame s.accountMap r Iₐ C
+              { (default : Account .EVM) with balance := σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } hrC hIₐC
+        case _ σ_r hLookR =>
+          have hRfind : s.accountMap.find? r = some σ_r := hLookR
+          split at h
+          case isTrue hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h
+            change Option.map (fun a : Account .EVM => a.code) ((_root_.Batteries.RBMap.insert _ _ _ : AccountMap .EVM).find? C) = _
+            exact code_proj_double_insert_reuse s.accountMap r Iₐ C σ_r
+              { σ_r with balance := σ_r.balance + σ_Iₐ.balance }
+              { σ_Iₐ with balance := ⟨0⟩ } rfl hRfind hIₐC
+          case isFalse hrIₐ =>
+            simp only [Except.ok.injEq] at h; subst h; rfl
+  case _ hPop =>
+    simp at h
+
+/-- Bridge: a preserved `find? a` code projection yields preserved `codeOf a`. -/
+theorem codeOf_of_code_proj_eq {σ σ' : AccountMap .EVM} {a : AccountAddress}
+    (h : (σ'.find? a).map (·.code) = (σ.find? a).map (·.code)) :
+    Frame.codeOf σ' a = Frame.codeOf σ a := by
+  unfold Frame.codeOf
+  cases h1 : σ'.find? a <;> cases h2 : σ.find? a <;>
+    rw [h1, h2] at h <;> simp_all
+
+/-- **`EvmYul.step` preserves `codeOf` at any `a ≠ codeOwner`, for every handled op INCLUDING
+SELFDESTRUCT.** No handled op deposits code; SSTORE/TSTORE rewrite storage, SELFDESTRUCT rewrites
+balances, strict ops leave `accountMap` untouched. Presence of `a` is only consumed in the
+SELFDESTRUCT branch (to exclude the fresh-default beneficiary shape). This is the non-system leaf
+of the closure's `codeOf C = demoTokenRuntime` invariant. -/
+theorem EvmYul.step_preserves_codeOf_at_ne_codeOwner
+    (op : Operation .EVM) (arg : Option (UInt256 × Nat))
+    (s s' : EVM.State) (a : AccountAddress)
+    (h_handled : handledByEvmYulStep op)
+    (h : EvmYul.step op arg s = .ok s')
+    (h_ne : a ≠ s.executionEnv.codeOwner)
+    (hpres : ∃ acc, s.accountMap.find? a = some acc) :
+    Frame.codeOf s'.accountMap a = Frame.codeOf s.accountMap a := by
+  by_cases h_sd : op = .SELFDESTRUCT
+  · subst h_sd
+    obtain ⟨acc, hacc⟩ := hpres
+    have harg : EvmYul.step (.SELFDESTRUCT : Operation .EVM) arg s
+        = EvmYul.step (.SELFDESTRUCT : Operation .EVM) .none s := by unfold EvmYul.step; rfl
+    rw [harg] at h
+    exact codeOf_of_code_proj_eq
+      (selfdestruct_code_proj_at_ne_Iₐ_eq s s' a acc h h_ne hacc)
+  · by_cases h_sstore : op = .StackMemFlow .SSTORE
+    · subst h_sstore
+      unfold EvmYul.step at h; simp only [Id.run] at h
+      exact binaryStateOp_preserves_codeOf (fun st u v => sstore_preserves_codeOf st u v a) h
+    · by_cases h_tstore : op = .StackMemFlow .TSTORE
+      · subst h_tstore
+        unfold EvmYul.step at h; simp only [Id.run] at h
+        exact binaryStateOp_preserves_codeOf (fun st u v => tstore_preserves_codeOf st u v a) h
+      · have hStrict : strictlyPreservesAccountMap op :=
+          ⟨h_handled, h_sd, h_sstore, h_tstore⟩
+        have hAM : s'.accountMap = s.accountMap :=
+          EvmYul.step_accountMap_eq_of_strict op arg s s' hStrict h
+        exact Frame.codeOf_of_find?_eq (by rw [hAM])
+
 /-- SELFDESTRUCT step preserves `SubstateSDExclude C` of the substate
 when the executing-frame address `Iₐ ≠ C`.
 
